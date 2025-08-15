@@ -1,11 +1,28 @@
-
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import type { SummaryData, Source, Highlight } from '../types';
 import { NEWS_OUTLETS } from '../constants';
 
-// Initialize the Google GenAI client.
-// The API key is stored in the `process.env.API_KEY` environment variable.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const API_KEY = process.env.API_KEY;
+
+let ai: GoogleGenAI | null = null;
+
+// Initialize the client only if the API key is present.
+if (API_KEY) {
+  ai = new GoogleGenAI({ apiKey: API_KEY });
+}
+
+/**
+ * A helper function to get the initialized AI client.
+ * Throws a user-friendly error if the client is not available.
+ */
+const getAiClient = (): GoogleGenAI => {
+  if (!ai) {
+    throw new Error(
+      "Your Gemini API key is not configured. Please add the API_KEY environment variable to your deployment platform's settings."
+    );
+  }
+  return ai;
+};
 
 
 const buildPrompt = (topic: string): string => {
@@ -89,7 +106,8 @@ export const generateLeaningFocusSummary = async (leaning: 'Left-Leaning' | 'Rig
     `;
 
     try {
-      const response: GenerateContentResponse = await ai.models.generateContent({
+      const client = getAiClient();
+      const response: GenerateContentResponse = await client.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
@@ -107,15 +125,17 @@ export const generateLeaningFocusSummary = async (leaning: 'Left-Leaning' | 'Rig
       if (error instanceof Error && error.message.includes('SAFETY')) {
           throw new Error('The request was blocked due to safety settings.');
       }
-      throw new Error(`Failed to generate focus summary for ${leaning}. The AI service may be temporarily unavailable.`);
+      // Re-throw the original error to be caught by the UI
+      throw error;
     }
 };
 
 export const generateNewsSummary = async (topic: string): Promise<SummaryData> => {
   try {
+    const client = getAiClient();
     const prompt = buildPrompt(topic);
     
-    const textResponse: GenerateContentResponse = await ai.models.generateContent({
+    const textResponse: GenerateContentResponse = await client.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
@@ -166,7 +186,7 @@ export const generateNewsSummary = async (topic: string): Promise<SummaryData> =
 
     if (imagePrompt) {
         try {
-            const imageResponse = await ai.models.generateImages({
+            const imageResponse = await client.models.generateImages({
                 model: 'imagen-3.0-generate-002',
                 prompt: `${imagePrompt}, photorealistic news style, high detail`,
                 config: {
@@ -210,6 +230,7 @@ export const generateNewsSummary = async (topic: string): Promise<SummaryData> =
     if (error instanceof Error && error.message.includes('SAFETY')) {
         throw new Error('The request was blocked due to safety settings. Please try a different topic.');
     }
-    throw new Error('Failed to generate news summary. The AI service may be temporarily unavailable.');
+    // Re-throw the original error to be caught by the UI
+    throw error;
   }
 };
