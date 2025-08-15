@@ -3,13 +3,21 @@ import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import type { SummaryData, Source, Highlight } from '../types';
 import { NEWS_OUTLETS } from '../constants';
 
-const API_KEY = process.env.API_KEY;
+// Lazily initialize the AI client to avoid crashing on module load if the API key is missing.
+let ai: GoogleGenAI | null = null;
 
-if (!API_KEY) {
-    throw new Error("API_KEY environment variable not set.");
-}
+const getAiClient = (): GoogleGenAI => {
+    if (ai) {
+        return ai;
+    }
+    const API_KEY = process.env.API_KEY;
+    if (!API_KEY) {
+        throw new Error("Your Gemini API key is not configured. Please add the API_KEY environment variable to your deployment platform's settings (e.g., Netlify).");
+    }
+    ai = new GoogleGenAI({ apiKey: API_KEY });
+    return ai;
+};
 
-const ai = new GoogleGenAI({ apiKey: API_KEY });
 
 const buildPrompt = (topic: string): string => {
   const leftLeaningSources = NEWS_OUTLETS['Left-Leaning'].join(', ');
@@ -76,6 +84,7 @@ const buildPrompt = (topic: string): string => {
 };
 
 export const generateLeaningFocusSummary = async (leaning: 'Left-Leaning' | 'Right-Leaning' | 'Center'): Promise<string> => {
+    const aiClient = getAiClient();
     const outlets = NEWS_OUTLETS[leaning].join(', ');
     const prompt = `
       You are an expert, unbiased news analyst.
@@ -92,7 +101,7 @@ export const generateLeaningFocusSummary = async (leaning: 'Left-Leaning' | 'Rig
     `;
 
     try {
-      const response: GenerateContentResponse = await ai.models.generateContent({
+      const response: GenerateContentResponse = await aiClient.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
@@ -115,10 +124,11 @@ export const generateLeaningFocusSummary = async (leaning: 'Left-Leaning' | 'Rig
 };
 
 export const generateNewsSummary = async (topic: string): Promise<SummaryData> => {
+  const aiClient = getAiClient();
   try {
     const prompt = buildPrompt(topic);
     
-    const textResponse: GenerateContentResponse = await ai.models.generateContent({
+    const textResponse: GenerateContentResponse = await aiClient.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: prompt,
         config: {
@@ -169,7 +179,7 @@ export const generateNewsSummary = async (topic: string): Promise<SummaryData> =
 
     if (imagePrompt) {
         try {
-            const imageResponse = await ai.models.generateImages({
+            const imageResponse = await aiClient.models.generateImages({
                 model: 'imagen-3.0-generate-002',
                 prompt: `${imagePrompt}, photorealistic news style, high detail`,
                 config: {
