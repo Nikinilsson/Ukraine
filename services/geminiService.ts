@@ -2,6 +2,7 @@ import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import type { SummaryData, Source, Highlight } from '../types';
 import { NEWS_OUTLETS } from '../constants';
 
+// Access the API key from environment variables.
 const API_KEY = process.env.API_KEY;
 
 let ai: GoogleGenAI | null = null;
@@ -18,7 +19,7 @@ if (API_KEY) {
 const getAiClient = (): GoogleGenAI => {
   if (!ai) {
     throw new Error(
-      "Your Gemini API key is not configured. Please add the API_KEY environment variable to your deployment platform's settings."
+      "The Google Gemini API client is not initialized. Please ensure the API key is configured correctly."
     );
   }
   return ai;
