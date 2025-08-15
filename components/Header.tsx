@@ -21,7 +21,7 @@ export const Header: React.FC = () => {
       </div>
       
       <div className="text-center">
-        <h1 className="text-4xl sm:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-gray-200 to-gray-400 tracking-tight">
+        <h1 className="text-4xl sm:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-300 to-yellow-300 tracking-tight">
           Ukraine News Synthesis
         </h1>
       </div>

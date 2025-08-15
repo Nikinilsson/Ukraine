@@ -6,13 +6,31 @@ import { PerspectiveTooltip } from './PerspectiveTooltip';
 
 interface SummaryDisplayProps {
   data: SummaryData;
+  searchTerm: string;
 }
 
-const escapeRegExp = (string: string) => {
+const escapeRegExp = (string: string): string => {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 };
 
-export const SummaryDisplay: React.FC<SummaryDisplayProps> = ({ data }) => {
+const applySearchHighlight = (text: string, searchTerm: string): React.ReactNode => {
+  if (!searchTerm || !searchTerm.trim()) {
+    return text;
+  }
+  const searchRegex = new RegExp(`(${escapeRegExp(searchTerm.trim())})`, 'gi');
+  const parts = text.split(searchRegex);
+  return parts.map((part, i) =>
+    i % 2 === 1 ? (
+      <mark key={i} className="bg-teal-400/50 ring-1 ring-teal-300 rounded-sm px-1">
+        {part}
+      </mark>
+    ) : (
+      <React.Fragment key={i}>{part}</React.Fragment>
+    )
+  );
+};
+
+export const SummaryDisplay: React.FC<SummaryDisplayProps> = ({ data, searchTerm }) => {
   const { topic, summary, sources, timestamp, imageUrl, imageCredit, pullQuote, highlights } = data;
   
   const [pinnedTooltip, setPinnedTooltip] = useState<{ content: Perspective; target: HTMLElement } | null>(null);
@@ -71,13 +89,13 @@ export const SummaryDisplay: React.FC<SummaryDisplayProps> = ({ data }) => {
 
     return allParagraphs.map((paragraph, pIndex) => {
       if (!highlights || highlights.length === 0) {
-        return <p key={pIndex}>{paragraph}</p>;
+        return <p key={pIndex}>{applySearchHighlight(paragraph, searchTerm)}</p>;
       }
       
       const highlightsInParagraph = highlights.filter(h => paragraph.includes(h.textToHighlight));
 
       if (highlightsInParagraph.length === 0) {
-        return <p key={pIndex}>{paragraph}</p>;
+        return <p key={pIndex}>{applySearchHighlight(paragraph, searchTerm)}</p>;
       }
 
       const highlightTexts = highlightsInParagraph.map(h => escapeRegExp(h.textToHighlight));
@@ -92,16 +110,16 @@ export const SummaryDisplay: React.FC<SummaryDisplayProps> = ({ data }) => {
               return (
                 <mark
                   key={partIndex}
-                  className="bg-ukraine-yellow/20 px-1 rounded-sm cursor-pointer transition-colors hover:bg-ukraine-yellow/40"
+                  className="bg-ukraine-yellow/20 rounded-sm cursor-pointer transition-colors hover:bg-ukraine-yellow/40"
                   onMouseEnter={(e) => handleMouseEnter(e, highlight.perspectives)}
                   onMouseLeave={handleMouseLeave}
                   onClick={(e) => handleClick(e, highlight.perspectives)}
                 >
-                  {part}
+                  {applySearchHighlight(part, searchTerm)}
                 </mark>
               );
             }
-            return <React.Fragment key={partIndex}>{part}</React.Fragment>;
+            return <React.Fragment key={partIndex}>{applySearchHighlight(part, searchTerm)}</React.Fragment>;
           })}
         </p>
       );
@@ -147,7 +165,7 @@ export const SummaryDisplay: React.FC<SummaryDisplayProps> = ({ data }) => {
         {pullQuote && (
           <blockquote className="my-6 p-4 border-l-4 border-ukraine-blue bg-black/20 rounded-r-lg">
             <p className="text-xl italic font-semibold text-gray-100 leading-relaxed">
-              "{pullQuote}"
+              "{applySearchHighlight(pullQuote, searchTerm)}"
             </p>
           </blockquote>
         )}

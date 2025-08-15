@@ -5,6 +5,7 @@ import { LoadingSpinner } from './components/LoadingSpinner';
 import { ErrorMessage } from './components/ErrorMessage';
 import { LeaningFocusSelector } from './components/LeaningFocusSelector';
 import { FocusSummaryDisplay } from './components/FocusSummaryDisplay';
+import { KeywordSearch } from './components/KeywordSearch';
 import { generateNewsSummary, generateLeaningFocusSummary } from './services/geminiService';
 import type { SummaryData } from './types';
 import { TOPICS } from './constants';
@@ -20,6 +21,8 @@ const App: React.FC = () => {
   const [focusSummary, setFocusSummary] = useState<string | null>(null);
   const [isFocusLoading, setIsFocusLoading] = useState<boolean>(false);
   const [focusError, setFocusError] = useState<string | null>(null);
+
+  const [searchTerm, setSearchTerm] = useState<string>('');
 
   useEffect(() => {
     const fetchAllSummaries = async () => {
@@ -107,7 +110,7 @@ const App: React.FC = () => {
       );
     }
     return summaries.map(summaryData => (
-      <SummaryDisplay key={summaryData.topic} data={summaryData} />
+      <SummaryDisplay key={summaryData.topic} data={summaryData} searchTerm={searchTerm} />
     ));
   };
   
@@ -132,8 +135,14 @@ const App: React.FC = () => {
               />
             )}
           </div>
+          
+          {!isLoading && !error && summaries.length > 0 && (
+             <div className="mb-8">
+              <KeywordSearch searchTerm={searchTerm} onSearchChange={setSearchTerm} />
+            </div>
+          )}
 
-          <div className="mt-8 space-y-8">
+          <div className="space-y-8">
             {renderContent()}
           </div>
         </main>
