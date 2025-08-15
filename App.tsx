@@ -6,8 +6,10 @@ import { ErrorMessage } from './components/ErrorMessage';
 import { LeaningFocusSelector } from './components/LeaningFocusSelector';
 import { FocusSummaryDisplay } from './components/FocusSummaryDisplay';
 import { KeywordSearch } from './components/KeywordSearch';
-import { generateNewsSummary, generateLeaningFocusSummary } from './services/geminiService';
-import type { SummaryData } from './types';
+import { CoverageChart } from './components/CoverageChart';
+import { TimelineDiagram } from './components/TimelineDiagram';
+import { generateNewsSummary, generateLeaningFocusSummary, generateCoverageStats, generateCoverageTimeline } from './services/geminiService';
+import type { SummaryData, CoverageStats, TimelineDataPoint } from './types';
 import { TOPICS } from './constants';
 
 type Leaning = 'Left-Leaning' | 'Center' | 'Right-Leaning';
@@ -23,6 +25,18 @@ const App: React.FC = () => {
   const [focusError, setFocusError] = useState<string | null>(null);
 
   const [searchTerm, setSearchTerm] = useState<string>('');
+  
+  // New states for coverage feature
+  const [coverageStats, setCoverageStats] = useState<CoverageStats | null>(null);
+  const [isCoverageLoading, setIsCoverageLoading] = useState<boolean>(true);
+  const [coverageError, setCoverageError] = useState<string | null>(null);
+  
+  const [timelineData, setTimelineData] = useState<TimelineDataPoint[] | null>(null);
+  const [isTimelineLoading, setIsTimelineLoading] = useState<boolean>(false);
+  const [timelineError, setTimelineError] = useState<string | null>(null);
+
+  const [showTimeline, setShowTimeline] = useState<boolean>(false);
+
 
   useEffect(() => {
     const fetchAllSummaries = async () => {
@@ -63,7 +77,21 @@ const App: React.FC = () => {
       }
     };
 
+    const fetchCoverageStats = async () => {
+        setIsCoverageLoading(true);
+        setCoverageError(null);
+        try {
+            const stats = await generateCoverageStats();
+            setCoverageStats(stats);
+        } catch (err) {
+            setCoverageError(err instanceof Error ? err.message : 'Could not load coverage stats.');
+        } finally {
+            setIsCoverageLoading(false);
+        }
+    };
+
     fetchAllSummaries();
+    fetchCoverageStats();
   }, []);
 
   const handleFocusSelect = async (leaning: Leaning) => {
@@ -90,6 +118,26 @@ const App: React.FC = () => {
     setSelectedFocus(null);
     setFocusSummary(null);
     setFocusError(null);
+  };
+
+  const handleTimelineOpen = async () => {
+    setShowTimeline(true);
+    if (timelineData) return; // Don't refetch if we have the data
+
+    setIsTimelineLoading(true);
+    setTimelineError(null);
+    try {
+        const data = await generateCoverageTimeline();
+        setTimelineData(data);
+    } catch(err) {
+        setTimelineError(err instanceof Error ? err.message : 'Could not load timeline data.');
+    } finally {
+        setIsTimelineLoading(false);
+    }
+  };
+
+  const handleTimelineClose = () => {
+    setShowTimeline(false);
   };
   
   const renderContent = () => {
@@ -119,11 +167,20 @@ const App: React.FC = () => {
       <div className="container mx-auto max-w-5xl">
         <Header />
         <main>
-          <LeaningFocusSelector
-            onSelect={handleFocusSelect}
-            selectedFocus={selectedFocus}
-            isLoading={isFocusLoading}
-          />
+          <div className="space-y-6">
+            <LeaningFocusSelector
+              onSelect={handleFocusSelect}
+              selectedFocus={selectedFocus}
+              isLoading={isFocusLoading}
+            />
+
+            <CoverageChart
+              stats={coverageStats}
+              isLoading={isCoverageLoading}
+              error={coverageError}
+              onClick={handleTimelineOpen}
+            />
+          </div>
 
           <div className="my-6 min-h-[1rem]">
             {focusError && <ErrorMessage message={focusError} />}
@@ -147,6 +204,14 @@ const App: React.FC = () => {
           </div>
         </main>
       </div>
+      {showTimeline && (
+        <TimelineDiagram 
+            data={timelineData || []}
+            onClose={handleTimelineClose}
+            isLoading={isTimelineLoading}
+            error={timelineError}
+        />
+      )}
     </div>
   );
 };

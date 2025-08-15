@@ -24,3 +24,14 @@ export interface SummaryData {
   pullQuote?: string;
   highlights?: Highlight[];
 }
+
+export interface CoverageStats {
+  us: number;
+  eu: number;
+}
+
+export interface TimelineDataPoint {
+  date: string;
+  us: number;
+  eu: number;
+}

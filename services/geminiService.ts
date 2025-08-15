@@ -1,6 +1,5 @@
-
-import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
-import type { SummaryData, Source, Highlight } from '../types';
+import { GoogleGenAI, GenerateContentResponse, Type } from "@google/genai";
+import type { SummaryData, Source, Highlight, CoverageStats, TimelineDataPoint } from '../types';
 import { NEWS_OUTLETS } from '../constants';
 
 let ai: GoogleGenAI | null = null;
@@ -237,5 +236,91 @@ export const generateNewsSummary = async (topic: string): Promise<SummaryData> =
     }
     // Re-throw the original error to be caught by the UI
     throw error;
+  }
+};
+
+export const generateCoverageStats = async (): Promise<CoverageStats> => {
+  const prompt = `
+    You are a media analyst AI. Your task is to estimate the percentage of news coverage focused on the 'War in Ukraine' compared to all other topics in the US and EU over the last 7 days.
+    Provide your response as a single, clean JSON object with two keys: "us" and "eu".
+    The values for these keys should be integers representing the percentage (e.g., from 0 to 100).
+    Do not include any explanatory text, markdown formatting, or anything outside of the JSON object.
+  `;
+  try {
+    const client = getAiClient();
+    const response: GenerateContentResponse = await client.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: {
+        tools: [{ googleSearch: {} }],
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            us: { type: Type.INTEGER },
+            eu: { type: Type.INTEGER },
+          },
+          required: ['us', 'eu'],
+        },
+      },
+    });
+
+    const data = JSON.parse(response.text);
+    if (typeof data.us !== 'number' || typeof data.eu !== 'number') {
+      throw new Error('Invalid data structure for coverage stats.');
+    }
+    return data;
+  } catch (error) {
+    console.error('Error generating coverage stats:', error);
+    throw new Error('Failed to generate media coverage statistics.');
+  }
+};
+
+export const generateCoverageTimeline = async (): Promise<TimelineDataPoint[]> => {
+  const prompt = `
+    You are a media analyst AI. Your task is to generate a timeline of news coverage intensity for the 'War in Ukraine' over the last 365 days.
+    Instructions:
+    1. Use Google Search to analyze news trends for the topic in both the US and the EU.
+    2. Generate data points for approximately every 15 days to create a trendline. This means you should provide around 24 data points.
+    3. The output must be a single, clean JSON array.
+    4. Each object in the array must contain three keys:
+      - "date": The date of the data point in "YYYY-MM-DD" format.
+      - "us": An integer from 0 to 100 representing the coverage intensity in the US on that day.
+      - "eu": An integer from 0 to 100 representing the coverage intensity in the EU on that day.
+    5. The array must be sorted chronologically, from oldest date to newest.
+    6. Do not include any explanatory text, markdown formatting, or anything outside of the JSON array.
+  `;
+  try {
+    const client = getAiClient();
+    const response: GenerateContentResponse = await client.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: {
+        tools: [{ googleSearch: {} }],
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              date: { type: Type.STRING },
+              us: { type: Type.INTEGER },
+              eu: { type: Type.INTEGER },
+            },
+            required: ['date', 'us', 'eu'],
+          }
+        },
+      },
+    });
+
+    const data = JSON.parse(response.text);
+    // Add basic validation
+    if (!Array.isArray(data) || data.some(d => typeof d.date !== 'string' || typeof d.us !== 'number' || typeof d.eu !== 'number')) {
+        throw new Error('Invalid data structure for timeline data.');
+    }
+    return data;
+  } catch (error) {
+    console.error('Error generating coverage timeline:', error);
+    throw new Error('Failed to generate media coverage timeline.');
   }
 };
