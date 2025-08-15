@@ -2,26 +2,26 @@ import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 import type { SummaryData, Source, Highlight } from '../types';
 import { NEWS_OUTLETS } from '../constants';
 
-// Access the API key from environment variables.
-const API_KEY = process.env.API_KEY;
-
 let ai: GoogleGenAI | null = null;
-
-// Initialize the client only if the API key is present.
-if (API_KEY) {
-  ai = new GoogleGenAI({ apiKey: API_KEY });
-}
 
 /**
  * A helper function to get the initialized AI client.
  * Throws a user-friendly error if the client is not available.
  */
 const getAiClient = (): GoogleGenAI => {
-  if (!ai) {
+  if (ai) {
+    return ai;
+  }
+
+  const apiKey = process.env.API_KEY;
+
+  if (!apiKey) {
     throw new Error(
-      "The Google Gemini API client is not initialized. Please ensure the API key is configured correctly."
+      "The Gemini API client could not be initialized. The API key is missing."
     );
   }
+  
+  ai = new GoogleGenAI({ apiKey });
   return ai;
 };
 
