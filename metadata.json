@@ -1,0 +1,5 @@
+{
+  "name": "Ukraine News Synthesis",
+  "description": "An application that uses AI to provide continuously updated, unbiased summaries of news regarding the situation in Ukraine, drawing from a variety of news sources and listing them. It also covers related global events impacting the conflict.",
+  "requestFramePermissions": []
+}
