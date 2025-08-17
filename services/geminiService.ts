@@ -1,5 +1,5 @@
-import { GoogleGenAI, GenerateContentResponse, Type } from "@google/genai";
-import type { SummaryData, Source, Highlight, CoverageStats, TimelineDataPoint } from '../types';
+import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
+import type { SummaryData, Source, Highlight } from '../types';
 import { NEWS_OUTLETS } from '../constants';
 
 let ai: GoogleGenAI | null = null;
@@ -28,6 +28,25 @@ const getAiClient = (): GoogleGenAI => {
   return ai;
 };
 
+/**
+ * Cleans a string that might contain a JSON object wrapped in markdown fences.
+ * @param responseText The raw text from the AI response.
+ * @returns A clean JSON string.
+ */
+const cleanJsonString = (responseText: string): string => {
+  let cleanedText = responseText.trim();
+  // Handles ```json ... ``` or ``` ... ```
+  const jsonRegex = /^```(?:json\s*)?([\s\S]*?)\s*```$/;
+  const match = cleanedText.match(jsonRegex);
+
+  // If there's a match, extract the JSON content. Otherwise, assume the whole string is JSON.
+  if (match && match[1]) {
+    return match[1];
+  }
+
+  return cleanedText;
+};
+
 
 const buildPrompt = (topic: string): string => {
   const leftLeaningSources = NEWS_OUTLETS['Left-Leaning'].join(', ');
@@ -49,7 +68,7 @@ const buildPrompt = (topic: string): string => {
 
     PART 1: THE SUMMARY
     1. Search for recent news articles (last 7 days) on the topic.
-    2. Write a concise, factual, and unbiased summary of 3-4 paragraphs.
+    2. Write a concise, factual, and unbiased summary of 1-2 paragraphs.
 
     PART 2: THE PULL QUOTE & IMAGE PROMPT
     1. After the summary, insert the separator: '|||---PULL_QUOTE---|||'.
@@ -66,7 +85,7 @@ const buildPrompt = (topic: string): string => {
        - "perspectives": An object with three keys: "left", "center", and "right". The value for each key should be a brief (1-2 sentences) explanation of how that media leaning (Left, Center, Right) typically frames or reports on the "textToHighlight".
 
     Example of the complete output structure:
-    [Your 3-4 paragraph summary is here...]
+    [Your 1-2 paragraph summary is here...]
     |||---PULL_QUOTE---|||
     [The single most important sentence from the summary]
     |||---IMAGE_PROMPT---|||
@@ -195,14 +214,14 @@ export const generateNewsSummary = async (topic: string): Promise<SummaryData> =
                 prompt: `${imagePrompt}, photorealistic news style, high detail`,
                 config: {
                     numberOfImages: 1,
-                    outputMimeType: 'image/jpeg',
-                    aspectRatio: '16:9',
+                    outputMimeType: 'image/png',
+                    aspectRatio: '4:3',
                 },
             });
 
             if (imageResponse.generatedImages && imageResponse.generatedImages.length > 0) {
                 const base64ImageBytes = imageResponse.generatedImages[0].image.imageBytes;
-                imageUrl = `data:image/jpeg;base64,${base64ImageBytes}`;
+                imageUrl = `data:image/png;base64,${base64ImageBytes}`;
                 imageCredit = "AI-generated artistic representation of the news.";
             }
         } catch (imgError) {
@@ -239,88 +258,21 @@ export const generateNewsSummary = async (topic: string): Promise<SummaryData> =
   }
 };
 
-export const generateCoverageStats = async (): Promise<CoverageStats> => {
-  const prompt = `
-    You are a media analyst AI. Your task is to estimate the percentage of news coverage focused on the 'War in Ukraine' compared to all other topics in the US and EU over the last 7 days.
-    Provide your response as a single, clean JSON object with two keys: "us" and "eu".
-    The values for these keys should be integers representing the percentage (e.g., from 0 to 100).
-    Do not include any explanatory text, markdown formatting, or anything outside of the JSON object.
-  `;
-  try {
-    const client = getAiClient();
-    const response: GenerateContentResponse = await client.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: {
-        tools: [{ googleSearch: {} }],
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            us: { type: Type.INTEGER },
-            eu: { type: Type.INTEGER },
-          },
-          required: ['us', 'eu'],
-        },
-      },
-    });
-
-    const data = JSON.parse(response.text);
-    if (typeof data.us !== 'number' || typeof data.eu !== 'number') {
-      throw new Error('Invalid data structure for coverage stats.');
+export const verifyGeminiConnection = async (): Promise<boolean> => {
+    try {
+        const client = getAiClient();
+        // A simple, low-cost call to verify the API key and connection.
+        await client.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: 'ping',
+            config: {
+                thinkingConfig: { thinkingBudget: 0 } // Disable thinking for a fast check
+            }
+        });
+        return true;
+    } catch (error) {
+        console.error('Gemini API connection check failed:', error);
+        // Re-throw the error to be handled by the UI with a specific message.
+        throw error;
     }
-    return data;
-  } catch (error) {
-    console.error('Error generating coverage stats:', error);
-    throw new Error('Failed to generate media coverage statistics.');
-  }
-};
-
-export const generateCoverageTimeline = async (): Promise<TimelineDataPoint[]> => {
-  const prompt = `
-    You are a media analyst AI. Your task is to generate a timeline of news coverage intensity for the 'War in Ukraine' over the last 365 days.
-    Instructions:
-    1. Use Google Search to analyze news trends for the topic in both the US and the EU.
-    2. Generate data points for approximately every 15 days to create a trendline. This means you should provide around 24 data points.
-    3. The output must be a single, clean JSON array.
-    4. Each object in the array must contain three keys:
-      - "date": The date of the data point in "YYYY-MM-DD" format.
-      - "us": An integer from 0 to 100 representing the coverage intensity in the US on that day.
-      - "eu": An integer from 0 to 100 representing the coverage intensity in the EU on that day.
-    5. The array must be sorted chronologically, from oldest date to newest.
-    6. Do not include any explanatory text, markdown formatting, or anything outside of the JSON array.
-  `;
-  try {
-    const client = getAiClient();
-    const response: GenerateContentResponse = await client.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: {
-        tools: [{ googleSearch: {} }],
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              date: { type: Type.STRING },
-              us: { type: Type.INTEGER },
-              eu: { type: Type.INTEGER },
-            },
-            required: ['date', 'us', 'eu'],
-          }
-        },
-      },
-    });
-
-    const data = JSON.parse(response.text);
-    // Add basic validation
-    if (!Array.isArray(data) || data.some(d => typeof d.date !== 'string' || typeof d.us !== 'number' || typeof d.eu !== 'number')) {
-        throw new Error('Invalid data structure for timeline data.');
-    }
-    return data;
-  } catch (error) {
-    console.error('Error generating coverage timeline:', error);
-    throw new Error('Failed to generate media coverage timeline.');
-  }
 };

@@ -130,7 +130,7 @@ export const SummaryDisplay: React.FC<SummaryDisplayProps> = ({ data, searchTerm
   const firstParagraph = summaryParagraphs.shift();
 
   return (
-    <article ref={articleRef} className="relative bg-black/20 backdrop-blur-xl p-6 sm:p-8 rounded-lg shadow-2xl border border-white/10 animate-[fadeIn_0.5s_ease-in-out]">
+    <article ref={articleRef} className="relative flex flex-col bg-black/20 backdrop-blur-xl p-6 sm:p-8 rounded-lg shadow-2xl border border-white/10 animate-[fadeIn_0.5s_ease-in-out]">
       {activeTooltip && (
         <PerspectiveTooltip 
           perspectives={activeTooltip.content}
@@ -149,7 +149,7 @@ export const SummaryDisplay: React.FC<SummaryDisplayProps> = ({ data, searchTerm
           <img 
             src={imageUrl} 
             alt={`AI-generated image for ${topic}`} 
-            className="w-full h-auto object-cover rounded-md shadow-lg" 
+            className="w-full h-64 object-cover rounded-md shadow-lg" 
           />
           {imageCredit && (
             <figcaption className="text-right text-xs text-gray-500 mt-2 italic">
@@ -159,7 +159,7 @@ export const SummaryDisplay: React.FC<SummaryDisplayProps> = ({ data, searchTerm
         </figure>
       )}
 
-      <div className="space-y-4 text-gray-200 text-lg leading-relaxed">
+      <div className="flex-grow space-y-4 text-gray-200 text-lg leading-relaxed">
         {firstParagraph}
         
         {pullQuote && (

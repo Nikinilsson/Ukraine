@@ -6,17 +6,47 @@ import { ErrorMessage } from './components/ErrorMessage';
 import { LeaningFocusSelector } from './components/LeaningFocusSelector';
 import { FocusSummaryDisplay } from './components/FocusSummaryDisplay';
 import { KeywordSearch } from './components/KeywordSearch';
+import { generateNewsSummary, generateLeaningFocusSummary, verifyGeminiConnection } from './services/geminiService';
+import type { SummaryData } from './types';
+import { TOPICS } from './constants';
 import { CoverageChart } from './components/CoverageChart';
 import { TimelineDiagram } from './components/TimelineDiagram';
-import { generateNewsSummary, generateLeaningFocusSummary, generateCoverageStats, generateCoverageTimeline } from './services/geminiService';
-import type { SummaryData, CoverageStats, TimelineDataPoint } from './types';
-import { TOPICS } from './constants';
 
 type Leaning = 'Left-Leaning' | 'Center' | 'Right-Leaning';
 
+/**
+ * A helper function to create user-friendly error messages.
+ * @param err The error caught.
+ * @returns A string with a user-friendly message.
+ */
+const getErrorMessage = (err: unknown): string => {
+    const defaultMessage = 'An unexpected error occurred. Please try again later.';
+    if (!(err instanceof Error)) {
+      return defaultMessage;
+    }
+
+    const message = err.message.toLowerCase();
+
+    // Check for specific configuration or connection errors first
+    if (message.includes('api_key') || message.includes('403') || message.includes('permission denied')) {
+      return 'Configuration Error: The application cannot connect to the AI service. Please ensure the API_KEY is correctly configured, valid, and has the necessary permissions.';
+    }
+    if (message.includes('429') || message.includes('quota')) {
+        return 'API Limit Reached: The service is experiencing high demand or quota limits have been met. Please try again later.';
+    }
+    // Check for content-related blocks
+    if (message.includes('safety')) {
+        return 'Content Blocked: The request was blocked due to safety settings. Please try a different topic.';
+    }
+    
+    return err.message || defaultMessage;
+};
+
+
 const App: React.FC = () => {
+  const [apiStatus, setApiStatus] = useState<'checking' | 'ok' | 'error'>('checking');
   const [summaries, setSummaries] = useState<SummaryData[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true); // For main summaries
+  const [isLoading, setIsLoading] = useState<boolean>(true); // For main summaries, after API check
   const [error, setError] = useState<string | null>(null);
 
   const [selectedFocus, setSelectedFocus] = useState<Leaning | null>(null);
@@ -26,73 +56,65 @@ const App: React.FC = () => {
 
   const [searchTerm, setSearchTerm] = useState<string>('');
   
-  // New states for coverage feature
-  const [coverageStats, setCoverageStats] = useState<CoverageStats | null>(null);
-  const [isCoverageLoading, setIsCoverageLoading] = useState<boolean>(true);
-  const [coverageError, setCoverageError] = useState<string | null>(null);
-  
-  const [timelineData, setTimelineData] = useState<TimelineDataPoint[] | null>(null);
-  const [isTimelineLoading, setIsTimelineLoading] = useState<boolean>(false);
-  const [timelineError, setTimelineError] = useState<string | null>(null);
-
-  const [showTimeline, setShowTimeline] = useState<boolean>(false);
-
-
+  // 1. Effect for API connection check
   useEffect(() => {
-    const fetchAllSummaries = async () => {
-      setIsLoading(true);
-      setError(null);
-      
+    const checkApiConnection = async () => {
       try {
-        const summaryPromises = TOPICS.map(topic => generateNewsSummary(topic));
-        const results = await Promise.allSettled(summaryPromises);
-
-        const successfulSummaries = results
-          .filter((result): result is PromiseFulfilledResult<SummaryData> => result.status === 'fulfilled')
-          .map(result => result.value);
-        
-        const failedCount = results.length - successfulSummaries.length;
-        if (failedCount > 0) {
-            console.error(`${failedCount} summary/summaries failed to load.`);
-            results.forEach((result, index) => {
-              if (result.status === 'rejected') {
-                console.error(`Error for topic "${TOPICS[index]}":`, result.reason);
-              }
-            });
-        }
-
-        if (successfulSummaries.length === 0 && failedCount > 0) {
-            const firstError = results.find(r => r.status === 'rejected') as PromiseRejectedResult;
-            const errorMessage = firstError.reason instanceof Error ? firstError.reason.message : 'An unknown error occurred';
-            throw new Error(errorMessage || 'Failed to load any news summaries.');
-        }
-
-        setSummaries(successfulSummaries);
-
+        await verifyGeminiConnection();
+        setApiStatus('ok');
       } catch (err) {
-        console.error(err);
-        setError(err instanceof Error ? err.message : 'An unexpected error occurred while loading news. Please try refreshing the page.');
-      } finally {
-        setIsLoading(false);
+        setError(getErrorMessage(err));
+        setApiStatus('error');
       }
     };
 
-    const fetchCoverageStats = async () => {
-        setIsCoverageLoading(true);
-        setCoverageError(null);
+    checkApiConnection();
+  }, []);
+
+  // 2. Effect for fetching data once API is confirmed OK
+  useEffect(() => {
+    if (apiStatus !== 'ok') return;
+
+    const fetchAllData = async () => {
+      setIsLoading(true);
+      setError(null);
+      
+      const fetchSummaries = async () => {
         try {
-            const stats = await generateCoverageStats();
-            setCoverageStats(stats);
+            const summaryPromises = TOPICS.map(topic => generateNewsSummary(topic));
+            const results = await Promise.allSettled(summaryPromises);
+
+            const successfulSummaries = results
+              .filter((result): result is PromiseFulfilledResult<SummaryData> => result.status === 'fulfilled')
+              .map(result => result.value);
+            
+            const failedCount = results.length - successfulSummaries.length;
+            if (failedCount > 0) {
+                console.error(`${failedCount} summary/summaries failed to load.`);
+                results.forEach((result, index) => {
+                  if (result.status === 'rejected') {
+                    console.error(`Error for topic "${TOPICS[index]}":`, result.reason);
+                  }
+                });
+            }
+
+            if (successfulSummaries.length === 0 && failedCount > 0) {
+                const firstError = results.find(r => r.status === 'rejected') as PromiseRejectedResult;
+                throw firstError.reason instanceof Error ? firstError.reason : new Error('Failed to load any news summaries.');
+            }
+            setSummaries(successfulSummaries);
         } catch (err) {
-            setCoverageError(err instanceof Error ? err.message : 'Could not load coverage stats.');
-        } finally {
-            setIsCoverageLoading(false);
+            console.error(err);
+            setError(getErrorMessage(err));
         }
+      };
+
+      await fetchSummaries();
+      setIsLoading(false);
     };
 
-    fetchAllSummaries();
-    fetchCoverageStats();
-  }, []);
+    fetchAllData();
+  }, [apiStatus]);
 
   const handleFocusSelect = async (leaning: Leaning) => {
     if (selectedFocus === leaning) {
@@ -108,7 +130,7 @@ const App: React.FC = () => {
       const summary = await generateLeaningFocusSummary(leaning);
       setFocusSummary(summary);
     } catch (err) {
-      setFocusError(err instanceof Error ? err.message : 'An unknown error occurred.');
+      setFocusError(getErrorMessage(err));
     } finally {
       setIsFocusLoading(false);
     }
@@ -120,29 +142,9 @@ const App: React.FC = () => {
     setFocusError(null);
   };
 
-  const handleTimelineOpen = async () => {
-    setShowTimeline(true);
-    if (timelineData) return; // Don't refetch if we have the data
-
-    setIsTimelineLoading(true);
-    setTimelineError(null);
-    try {
-        const data = await generateCoverageTimeline();
-        setTimelineData(data);
-    } catch(err) {
-        setTimelineError(err instanceof Error ? err.message : 'Could not load timeline data.');
-    } finally {
-        setIsTimelineLoading(false);
-    }
-  };
-
-  const handleTimelineClose = () => {
-    setShowTimeline(false);
-  };
-  
   const renderContent = () => {
     if (isLoading) {
-      return <LoadingSpinner />;
+      return <LoadingSpinner statusMessage="Generating latest news summaries..." />;
     }
     if (error) {
       return <ErrorMessage message={error} />;
@@ -157,61 +159,57 @@ const App: React.FC = () => {
         </div>
       );
     }
-    return summaries.map(summaryData => (
-      <SummaryDisplay key={summaryData.topic} data={summaryData} searchTerm={searchTerm} />
-    ));
+    return (
+       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        {summaries.map(summaryData => (
+          <SummaryDisplay key={summaryData.topic} data={summaryData} searchTerm={searchTerm} />
+        ))}
+      </div>
+    );
   };
   
   return (
     <div className="min-h-screen font-sans p-4 sm:p-6 lg:p-8">
       <div className="container mx-auto max-w-5xl">
         <Header />
-        <main>
-          <div className="space-y-6">
-            <LeaningFocusSelector
-              onSelect={handleFocusSelect}
-              selectedFocus={selectedFocus}
-              isLoading={isFocusLoading}
-            />
 
-            <CoverageChart
-              stats={coverageStats}
-              isLoading={isCoverageLoading}
-              error={coverageError}
-              onClick={handleTimelineOpen}
-            />
-          </div>
+        {apiStatus === 'checking' && <LoadingSpinner statusMessage="Verifying AI Service Connection..." />}
 
-          <div className="my-6 min-h-[1rem]">
-            {focusError && <ErrorMessage message={focusError} />}
-            {focusSummary && selectedFocus && !isFocusLoading && (
-              <FocusSummaryDisplay
-                leaning={selectedFocus}
-                summary={focusSummary}
-                onClose={handleCloseFocus}
-              />
-            )}
-          </div>
-          
-          {!isLoading && !error && summaries.length > 0 && (
-             <div className="mb-8">
-              <KeywordSearch searchTerm={searchTerm} onSearchChange={setSearchTerm} />
-            </div>
-          )}
+        {apiStatus === 'error' && <ErrorMessage message={error || 'An unknown connection error occurred.'} />}
 
-          <div className="space-y-8">
-            {renderContent()}
-          </div>
-        </main>
+        {apiStatus === 'ok' && (
+          <>
+            <main>
+              <div className="mb-6">
+                <LeaningFocusSelector
+                  onSelect={handleFocusSelect}
+                  selectedFocus={selectedFocus}
+                  isLoading={isFocusLoading}
+                />
+              </div>
+
+              <div className="my-6 min-h-[1rem]">
+                {focusError && <ErrorMessage message={focusError} />}
+                {focusSummary && selectedFocus && !isFocusLoading && (
+                  <FocusSummaryDisplay
+                    leaning={selectedFocus}
+                    summary={focusSummary}
+                    onClose={handleCloseFocus}
+                  />
+                )}
+              </div>
+              
+              {!isLoading && !error && summaries.length > 0 && (
+                 <div className="mb-8">
+                  <KeywordSearch searchTerm={searchTerm} onSearchChange={setSearchTerm} />
+                </div>
+              )}
+
+              {renderContent()}
+            </main>
+          </>
+        )}
       </div>
-      {showTimeline && (
-        <TimelineDiagram 
-            data={timelineData || []}
-            onClose={handleTimelineClose}
-            isLoading={isTimelineLoading}
-            error={timelineError}
-        />
-      )}
     </div>
   );
 };

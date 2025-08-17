@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 
 const LOADING_MESSAGES = [
@@ -11,7 +10,11 @@ const LOADING_MESSAGES = [
     'Finalizing reports...',
 ];
 
-export const LoadingSpinner: React.FC = () => {
+interface LoadingSpinnerProps {
+  statusMessage: string;
+}
+
+export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({ statusMessage }) => {
   const [messageIndex, setMessageIndex] = useState(0);
 
   useEffect(() => {
@@ -30,7 +33,7 @@ export const LoadingSpinner: React.FC = () => {
         <div className="absolute text-gray-300 font-bold text-sm">LOADING</div>
       </div>
       <p className="text-lg font-semibold text-gray-200 mt-6">
-        Generating latest news summaries...
+        {statusMessage}
       </p>
       <p className="text-gray-400 mt-2 animate-pulse-fast">
         {LOADING_MESSAGES[messageIndex]}
