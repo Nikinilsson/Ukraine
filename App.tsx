@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { SummaryDisplay } from './components/SummaryDisplay';
@@ -5,12 +6,13 @@ import { LoadingSpinner } from './components/LoadingSpinner';
 import { ErrorMessage } from './components/ErrorMessage';
 import { LeaningFocusSelector } from './components/LeaningFocusSelector';
 import { FocusSummaryDisplay } from './components/FocusSummaryDisplay';
-import { KeywordSearch } from './components/KeywordSearch';
 import { generateNewsSummary, generateLeaningFocusSummary, verifyGeminiConnection } from './services/geminiService';
 import type { SummaryData } from './types';
 import { TOPICS } from './constants';
 import { CoverageChart } from './components/CoverageChart';
 import { TimelineDiagram } from './components/TimelineDiagram';
+import { DeepStateMap } from './components/DeepStateMap';
+import { ArticleModal } from './components/ArticleModal';
 
 type Leaning = 'Left-Leaning' | 'Center' | 'Right-Leaning';
 
@@ -53,9 +55,9 @@ const App: React.FC = () => {
   const [focusSummary, setFocusSummary] = useState<string | null>(null);
   const [isFocusLoading, setIsFocusLoading] = useState<boolean>(false);
   const [focusError, setFocusError] = useState<string | null>(null);
-
-  const [searchTerm, setSearchTerm] = useState<string>('');
   
+  const [selectedSummary, setSelectedSummary] = useState<SummaryData | null>(null);
+
   // 1. Effect for API connection check
   useEffect(() => {
     const checkApiConnection = async () => {
@@ -162,7 +164,11 @@ const App: React.FC = () => {
     return (
        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {summaries.map(summaryData => (
-          <SummaryDisplay key={summaryData.topic} data={summaryData} searchTerm={searchTerm} />
+          <SummaryDisplay 
+            key={summaryData.topic} 
+            data={summaryData} 
+            onClick={() => setSelectedSummary(summaryData)}
+          />
         ))}
       </div>
     );
@@ -199,14 +205,21 @@ const App: React.FC = () => {
                 )}
               </div>
               
-              {!isLoading && !error && summaries.length > 0 && (
+               {!isLoading && !error && summaries.length > 0 && (
                  <div className="mb-8">
-                  <KeywordSearch searchTerm={searchTerm} onSearchChange={setSearchTerm} />
+                  <DeepStateMap />
                 </div>
               )}
-
+             
               {renderContent()}
             </main>
+
+            {selectedSummary && (
+              <ArticleModal 
+                data={selectedSummary}
+                onClose={() => setSelectedSummary(null)}
+              />
+            )}
           </>
         )}
       </div>

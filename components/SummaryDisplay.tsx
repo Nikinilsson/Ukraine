@@ -1,206 +1,47 @@
-import React, { useState, useRef, useEffect } from 'react';
-import type { SummaryData, Perspective, Highlight } from '../types';
-import { GlobeIcon } from './icons/GlobeIcon';
-import { ChevronDownIcon } from './icons/ChevronDownIcon';
-import { PerspectiveTooltip } from './PerspectiveTooltip';
+
+import React from 'react';
+import type { SummaryData } from '../types';
 
 interface SummaryDisplayProps {
   data: SummaryData;
-  searchTerm: string;
+  onClick: () => void;
 }
 
-const escapeRegExp = (string: string): string => {
-  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-};
+export const SummaryDisplay: React.FC<SummaryDisplayProps> = ({ data, onClick }) => {
+  const { topic, pullQuote, summary, imageUrl } = data;
 
-const applySearchHighlight = (text: string, searchTerm: string): React.ReactNode => {
-  if (!searchTerm || !searchTerm.trim()) {
-    return text;
-  }
-  const searchRegex = new RegExp(`(${escapeRegExp(searchTerm.trim())})`, 'gi');
-  const parts = text.split(searchRegex);
-  return parts.map((part, i) =>
-    i % 2 === 1 ? (
-      <mark key={i} className="bg-teal-400/50 ring-1 ring-teal-300 rounded-sm px-1">
-        {part}
-      </mark>
-    ) : (
-      <React.Fragment key={i}>{part}</React.Fragment>
-    )
-  );
-};
-
-export const SummaryDisplay: React.FC<SummaryDisplayProps> = ({ data, searchTerm }) => {
-  const { topic, summary, sources, timestamp, imageUrl, imageCredit, pullQuote, highlights } = data;
-  
-  const [pinnedTooltip, setPinnedTooltip] = useState<{ content: Perspective; target: HTMLElement } | null>(null);
-  const [hoveredTooltip, setHoveredTooltip] = useState<{ content: Perspective; target: HTMLElement } | null>(null);
-  const articleRef = useRef<HTMLElement>(null);
-
-  const activeTooltip = pinnedTooltip || hoveredTooltip;
-
-  const handleMouseEnter = (event: React.MouseEvent<HTMLElement>, perspectives: Perspective) => {
-    if (!pinnedTooltip) {
-      setHoveredTooltip({ content: perspectives, target: event.currentTarget });
-    }
-  };
-
-  const handleMouseLeave = () => {
-    setHoveredTooltip(null);
-  };
-  
-  const handleClick = (event: React.MouseEvent<HTMLElement>, perspectives: Perspective) => {
-    if (pinnedTooltip && pinnedTooltip.target === event.currentTarget) {
-      setPinnedTooltip(null);
-    } else {
-      setHoveredTooltip(null); // Hide hover tooltip when pinning
-      setPinnedTooltip({ content: perspectives, target: event.currentTarget });
-    }
-  };
-  
-  const closeTooltip = () => {
-    setPinnedTooltip(null);
-    setHoveredTooltip(null);
-  };
-
-  // Close pinned tooltip if user clicks outside of it
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (!pinnedTooltip) return;
-      
-      const tooltipEl = document.getElementById('perspective-tooltip');
-      
-      if (
-        tooltipEl && !tooltipEl.contains(event.target as Node) &&
-        !pinnedTooltip.target.contains(event.target as Node)
-      ) {
-        closeTooltip();
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [pinnedTooltip]);
-
-  const renderSummaryWithHighlights = () => {
-    const allParagraphs = summary.split('\n').filter(p => p.trim());
-
-    return allParagraphs.map((paragraph, pIndex) => {
-      if (!highlights || highlights.length === 0) {
-        return <p key={pIndex}>{applySearchHighlight(paragraph, searchTerm)}</p>;
-      }
-      
-      const highlightsInParagraph = highlights.filter(h => paragraph.includes(h.textToHighlight));
-
-      if (highlightsInParagraph.length === 0) {
-        return <p key={pIndex}>{applySearchHighlight(paragraph, searchTerm)}</p>;
-      }
-
-      const highlightTexts = highlightsInParagraph.map(h => escapeRegExp(h.textToHighlight));
-      const regex = new RegExp(`(${highlightTexts.join('|')})`, 'g');
-      const parts = paragraph.split(regex);
-      
-      return (
-        <p key={pIndex}>
-          {parts.map((part, partIndex) => {
-            const highlight = highlights.find(h => h.textToHighlight === part);
-            if (highlight) {
-              return (
-                <mark
-                  key={partIndex}
-                  className="bg-ukraine-yellow/20 rounded-sm cursor-pointer transition-colors hover:bg-ukraine-yellow/40"
-                  onMouseEnter={(e) => handleMouseEnter(e, highlight.perspectives)}
-                  onMouseLeave={handleMouseLeave}
-                  onClick={(e) => handleClick(e, highlight.perspectives)}
-                >
-                  {applySearchHighlight(part, searchTerm)}
-                </mark>
-              );
-            }
-            return <React.Fragment key={partIndex}>{applySearchHighlight(part, searchTerm)}</React.Fragment>;
-          })}
-        </p>
-      );
-    });
-  };
-
-  const summaryParagraphs = renderSummaryWithHighlights();
-  const firstParagraph = summaryParagraphs.shift();
+  const briefSummary = pullQuote || (summary.split('.')[0] + '.');
 
   return (
-    <article ref={articleRef} className="relative flex flex-col bg-black/20 backdrop-blur-xl p-6 sm:p-8 rounded-lg shadow-2xl border border-white/10 animate-[fadeIn_0.5s_ease-in-out]">
-      {activeTooltip && (
-        <PerspectiveTooltip 
-          perspectives={activeTooltip.content}
-          targetElement={activeTooltip.target}
-          containerElement={articleRef.current}
-          onClose={closeTooltip}
+    <div
+      onClick={onClick}
+      onKeyPress={(e) => (e.key === 'Enter' || e.key === ' ') && onClick()}
+      role="button"
+      tabIndex={0}
+      className="relative flex flex-col justify-end min-h-[350px] bg-gray-800 p-6 rounded-lg shadow-2xl border border-white/10 overflow-hidden cursor-pointer group transition-all duration-300 ease-in-out hover:border-ukraine-yellow/80 hover:shadow-yellow-500/10 focus:outline-none focus:ring-2 focus:ring-ukraine-yellow focus:ring-offset-2 focus:ring-offset-gray-900 animate-[fadeIn_0.5s_ease-in-out]"
+    >
+      {imageUrl && (
+        <img
+          src={imageUrl}
+          alt={`AI-generated image for ${topic}`}
+          className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 ease-in-out group-hover:scale-105"
         />
       )}
-      <div className="border-b border-white/10 pb-4 mb-6">
-        <h2 className="text-2xl sm:text-3xl font-bold text-ukraine-yellow">{topic}</h2>
-        <p className="text-sm text-gray-400 mt-1">Summary generated on: {timestamp}</p>
+      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent"></div>
+      
+      <div className="relative z-10">
+        <h2 className="text-2xl font-bold text-ukraine-yellow mb-2 group-hover:text-yellow-300 transition-colors">
+          {topic}
+        </h2>
+        <p className="text-gray-200 text-lg leading-relaxed mb-4 italic">
+          "{briefSummary}"
+        </p>
+        <span
+          className="inline-block font-semibold text-white bg-white/10 py-2 px-4 rounded-full group-hover:bg-ukraine-yellow group-hover:text-black transition-colors duration-300"
+        >
+          Read Full Summary &rarr;
+        </span>
       </div>
-
-      {imageUrl && (
-        <figure className="mb-6">
-          <img 
-            src={imageUrl} 
-            alt={`AI-generated image for ${topic}`} 
-            className="w-full h-64 object-cover rounded-md shadow-lg" 
-          />
-          {imageCredit && (
-            <figcaption className="text-right text-xs text-gray-500 mt-2 italic">
-              {imageCredit}
-            </figcaption>
-          )}
-        </figure>
-      )}
-
-      <div className="flex-grow space-y-4 text-gray-200 text-lg leading-relaxed">
-        {firstParagraph}
-        
-        {pullQuote && (
-          <blockquote className="my-6 p-4 border-l-4 border-ukraine-blue bg-black/20 rounded-r-lg">
-            <p className="text-xl italic font-semibold text-gray-100 leading-relaxed">
-              "{applySearchHighlight(pullQuote, searchTerm)}"
-            </p>
-          </blockquote>
-        )}
-
-        {summaryParagraphs}
-      </div>
-
-      {sources.length > 0 && (
-        <div className="mt-8 pt-6 border-t border-white/10">
-          <details className="group">
-            <summary className="flex items-center justify-between cursor-pointer list-none hover:bg-white/10 p-2 rounded-md transition-colors">
-              <h3 className="text-xl font-semibold text-gray-200 flex items-center">
-                <GlobeIcon className="h-6 w-6 mr-2 text-ukraine-blue" />
-                Sources ({sources.length})
-              </h3>
-              <ChevronDownIcon className="h-6 w-6 text-gray-400 transform transition-transform duration-300 group-open:rotate-180" />
-            </summary>
-            <ul className="space-y-3 mt-4 pl-4 border-l-2 border-gray-500/50">
-              {sources.map((source, index) => (
-                <li key={index} className="flex items-start">
-                  <span className="text-ukraine-blue mr-3 mt-1">&#9656;</span>
-                  <a
-                    href={source.uri}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-400 hover:text-ukraine-yellow hover:underline transition-colors duration-200 break-all"
-                  >
-                    {source.title}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </details>
-        </div>
-      )}
-    </article>
+    </div>
   );
 };
